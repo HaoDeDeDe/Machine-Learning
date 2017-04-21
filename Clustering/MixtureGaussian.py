@@ -75,7 +75,7 @@ def MixtureGaussianCluster(K, data):
 
 
 if __name__ == '__main__':
-    data = np.loadtxt("/Users/DaisyYang/Desktop/STAT_37710/Assignment/1/Kmeans/toydata.txt")
+    data = np.loadtxt("./toydata.txt")
     random.seed(100)
 
     iter, assign = MixtureGaussianCluster(3, data)

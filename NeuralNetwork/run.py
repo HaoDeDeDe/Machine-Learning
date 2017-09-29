@@ -2,8 +2,12 @@ import numpy as np
 import framework as fw
 from time import time
 import pickle
+import os
 
 if __name__ == '__main__':
+    if not os.path.exists("./models"):
+        os.mkdir("./models")
+
     ### read features and labels
     trainX = np.genfromtxt("./data/TrainDigitX.csv", delimiter=",")  # (50000, 784)
     trainY_raw = np.genfromtxt("./data/TrainDigitY.csv", delimiter=",", dtype=np.int32)  # (50000, )
@@ -40,8 +44,9 @@ if __name__ == '__main__':
     HoldoutX = trainX[index,]
     HoldoutY = trainY[index,]
 
+    batch_size = 128
     hidden_dims = [32, 64, 128, 256]
-    etas = [0.05, 0.07, 0.10, 0.30]
+    etas = [0.05, 0.10, 0.30, 0.50]
     for hidden_dim in hidden_dims:
         for eta in etas:
             print("")
@@ -57,14 +62,21 @@ if __name__ == '__main__':
             paras = []
             Input = fw.Value(None, (1, feature_dim))
             Label = fw.Value(None, (1, num_class))
+
             W1 = fw.Para((feature_dim, hidden_dim))
             b1 = fw.Para((hidden_dim,))
-            hidden = fw.Sigmoid(fw.VAdd(fw.VMul(Input, W1), b1))
-            W2 = fw.Para((hidden_dim, num_class))
-            b2 = fw.Para((num_class,))
-            pred = fw.Sigmoid(fw.VAdd(fw.VMul(hidden, W2), b2))
+            hidden1 = fw.Sigmoid(fw.VAdd(fw.VMul(Input, W1), b1))
+
+            W2 = fw.Para((hidden_dim, hidden_dim))
+            b2 = fw.Para((hidden_dim,))
+            hidden2 = fw.Sigmoid(fw.VAdd(fw.VMul(hidden1, W2), b2))
+
+            W3 = fw.Para((hidden_dim, num_class))
+            b3 = fw.Para((num_class,))
+            pred = fw.Softmax(fw.VAdd(fw.VMul(hidden2, W3), b3))
+
             loss = fw.Mean(fw.SquaredLoss(pred, Label))
-            paras.extend([W1, b1, W2, b2])
+            paras.extend([W1, b1, W2, b2, W3, b3])
 
             ### train
             epoch = 1
@@ -76,9 +88,12 @@ if __name__ == '__main__':
             while True:
                 stime = time()
                 perm = np.random.permutation(num_Train)
-                for i in range(num_Train):
-                    Input.set(TrainX[perm[i],], (1, feature_dim))
-                    Label.set(TrainY[perm[i],], (1, num_class))
+                num_fed = 0
+                while num_fed < num_Train:
+                    feed = min(batch_size, num_Train - num_fed)
+                    Input.set(TrainX[perm[num_fed: num_fed + feed], ], (feed, feature_dim))
+                    Label.set(TrainY[perm[num_fed: num_fed + feed], ], (feed, num_class))
+                    num_fed += feed
                     fw.Forward()
                     fw.Backward(loss)
                     fw.SGD(eta)
@@ -103,7 +118,7 @@ if __name__ == '__main__':
                     break
                 else:
                     if holdout_error[-1] < holdout_error_min:
-                        f = open('./basic_model_dim' + str(hidden_dim) + 'eta' + str(eta) + '.pkl', 'wb')
+                        f = open('./models/model_dim' + str(hidden_dim) + 'eta' + str(eta) + '.pkl', 'wb')
                         p_value = []
                         for p in paras:
                             p_value.append(p.value)
@@ -112,7 +127,7 @@ if __name__ == '__main__':
                     holdout_error_min = np.minimum(holdout_error[-1], holdout_error_min)
                     epoch += 1
 
-            with open('./basic_model_dim' + str(hidden_dim) + 'eta' + str(eta) + '.pkl', 'rb') as f:
+            with open('./models/model_dim' + str(hidden_dim) + 'eta' + str(eta) + '.pkl', 'rb') as f:
                 p_value = pickle.load(f)
                 idx = 0
                 for p in p_value:
